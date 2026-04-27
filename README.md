@@ -1,9 +1,9 @@
 # Backpack Tilt Monitor (Flask Backend)
-123
+
 This project runs your monitor UI with a Flask backend that talks to Arduino over serial.
 
 ## What changed
-123456
+
 - Frontend is now served by Flask (`templates/index.html`)
 - Real-time updates use Server-Sent Events (`/api/stream`)
 - Device commands use REST (`/api/command`)

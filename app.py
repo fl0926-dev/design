@@ -12,12 +12,7 @@ HOW TO RUN:
   2. Run: python app.py
   3. Open: http://localhost:8000
 """
-git init
-git add .
-git commit -m "123"
-git branch -M main
-git remote add origin https://github.com/fl0926-dev/design.git
-git push -u origin main
+
 
 
 import glob
