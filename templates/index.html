@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0f1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Backpack Tilt Monitor</title>
+  <style>
+    /* ── Colour Variables ──────────────────────────────────────── */
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d27;
+      --surface2: #242835;
+      --border:   #2e3346;
+      --border2:  #3a4060;
+      --text:     #e2e4ed;
+      --dim:      #8b8fa3;
+      --accent:   #5b8af5;
+      --accent2:  #7ca3f8;
+      --green:    #34d399;
+      --red:      #f87171;
+      --amber:    #fbbf24;
+      --shadow:   0 4px 24px rgba(0,0,0,0.5);
+      --shadow-sm:0 2px 8px rgba(0,0,0,0.35);
+    }
+
+    /* ── Base Reset ────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      background-image: radial-gradient(ellipse at 50% -10%, #1a2035 0%, transparent 65%);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    /* Thin colour stripe at the very top of the page */
+    body::before {
+      content: '';
+      display: block;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--green), var(--accent2));
+    }
+
+    /* ── Page Container ────────────────────────────────────────── */
+    .app { max-width: 1100px; margin: 0 auto; padding: 24px 20px 40px; }
+
+    /* ── Header ────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .header-title { display: flex; align-items: center; gap: 10px; }
+    .header-icon {
+      width: 4px; height: 22px; border-radius: 2px;
+      background: linear-gradient(180deg, var(--accent), var(--green));
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 20px; font-weight: 600; }
+
+    /* ── Grid Layouts ──────────────────────────────────────────── */
+    .grid   { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr;     gap: 16px; margin-bottom: 16px; }
+    @media (max-width: 768px) {
+      .grid, .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* ── Cards ─────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    /* Subtle red glow when an alert is actively firing */
+    .card.alert-glow {
+      border-color: rgba(248,113,113,0.4);
+      box-shadow: var(--shadow), 0 0 32px rgba(248,113,113,0.12);
+    }
+    .card-label {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.8px; color: var(--dim); margin-bottom: 10px;
+    }
+    .card-sub { font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+    /* ── Connection Indicator ──────────────────────────────────── */
+    .conn-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex-shrink: 0; }
+    .dot.on  { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .dot.off { background: var(--red); }
+
+    /* ── Buttons ───────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text);
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover    { background: var(--border2); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn.blue {
+      background: linear-gradient(135deg, #5b8af5, #4870d8);
+      border-color: #5b8af5; color: #fff;
+      box-shadow: 0 2px 12px rgba(91,138,245,0.3);
+    }
+    .btn.blue:hover {
+      background: linear-gradient(135deg, #6b96f5, #3d6ee0);
+      box-shadow: 0 2px 18px rgba(91,138,245,0.45);
+    }
+    .btn.red   { border-color: #7f1d1d; color: var(--red); }
+    .btn.red:hover   { background: #2a1215; }
+    /* Larger tap targets on phones */
+    @media (max-width: 480px) { .btn { min-height: 44px; } }
+
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ── Tilt Gauge (SVG arc) ──────────────────────────────────── */
+    .gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 10px 0; }
+    .gauge-svg  { width: 200px; height: 120px; }
+
+    /* ── Alert Badge ───────────────────────────────────────────── */
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .badge.ok  { background: #064e3b; color: var(--green); }
+    .badge.bad { background: #7f1d1d; color: var(--red); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+    /* ── Session Stats ─────────────────────────────────────────── */
+    #statCount, #statDuration, #statUptime {
+      font-size: 22px; font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      transition: color 0.3s;
+    }
+
+    /* ── Alert Event Table ─────────────────────────────────────── */
+    .scroll-wrap { max-height: 280px; overflow-y: auto; margin-top: 8px; }
+    .scroll-wrap::-webkit-scrollbar { width: 4px; }
+    .scroll-wrap::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    table  { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.6px; color: var(--dim); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--surface); font-weight: 600;
+    }
+    td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.025); }
+    .empty { text-align: center; color: var(--dim); padding: 32px 16px; font-size: 13px; }
+
+    /* ── Weekly Bar Chart ──────────────────────────────────────── */
+    .bar-row   { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .bar-label { width: 36px; font-size: 12px; color: var(--dim); text-align: right; }
+    .bar-track { flex: 1; height: 22px; background: var(--surface2); border-radius: 4px; overflow: hidden; }
+    .bar-fill  {
+      height: 100%; border-radius: 4px; transition: width 0.4s;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+    .bar-count { width: 32px; font-size: 12px; color: var(--dim); }
+
+    /* ── Communication Log ─────────────────────────────────────── */
+    .log {
+      font-family: monospace; font-size: 12px; color: var(--dim);
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 12px;
+      max-height: 120px; overflow-y: auto; margin-top: 8px; line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ══ HEADER ════════════════════════════════════════════════ -->
+  <header>
+    <div class="header-title">
+      <div class="header-icon"></div>
+      <h1>Backpack Tilt Monitor</h1>
+    </div>
+    <div class="conn-bar">
+      <span class="dot" id="dot"></span>
+      <span style="font-size:13px; color:var(--dim);" id="connLabel">Disconnected</span>
+      <select class="btn" id="portSelect" title="Serial Port"></select>
+      <button class="btn" onclick="refreshPorts()">Refresh Ports</button>
+      <button class="btn blue" id="btnConnect" onclick="toggleConnection()">Connect</button>
+    </div>
+  </header>
+
+  <!-- ══ LIVE DATA CARDS ══════════════════════════════════════ -->
+  <div class="grid">
+
+    <!-- Tilt Angle Gauge -->
+    <div class="card">
+      <div class="card-label">Current Tilt Angle</div>
+      <div class="gauge-wrap">
+        <svg class="gauge-svg" viewBox="0 0 200 110">
+          <defs>
+            <!-- Soft glow applied to the gauge arc during an active alert -->
+            <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- Grey background arc (full 0–90 range) -->
+          <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#2e3346" stroke-width="12" stroke-linecap="round"/>
+          <!-- Coloured arc — width and colour set by applyLive() -->
+          <path id="gaugeArc" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#5b8af5" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 251.33"/>
+          <!-- Amber dot marking the 15° alert threshold -->
+          <circle id="thresholdDot" cx="30.7" cy="60" r="3" fill="#fbbf24" opacity="0.6"/>
+          <!-- Numeric readout -->
+          <text id="gaugeNum" x="100" y="88" text-anchor="middle" fill="#e2e4ed" font-size="32" font-weight="700">0.0</text>
+          <text x="100" y="106" text-anchor="middle" fill="#8b8fa3" font-size="11">degrees</text>
+          <text x="16"  y="108" text-anchor="middle" fill="#8b8fa3" font-size="9">0</text>
+          <text x="184" y="108" text-anchor="middle" fill="#8b8fa3" font-size="9">90</text>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Alert Status -->
+    <div class="card" id="alertCard">
+      <div class="card-label">Alert Status</div>
+      <div id="alertBadge" style="margin-top:12px;">
+        <span class="badge ok">POSTURE OK</span>
+      </div>
+      <div class="card-sub" id="alertDetail" style="margin-top:14px;">No active alert</div>
+      <div class="card-sub" style="margin-top:12px;">Threshold: 15 deg for 2 s</div>
+    </div>
+
+    <!-- Session Statistics -->
+    <div class="card">
+      <div class="card-label">Session Statistics</div>
+      <div style="margin-top:6px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+          <span class="card-sub">Alerts triggered</span>
+          <span id="statCount">0</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+          <span class="card-sub">Total alert time</span>
+          <span id="statDuration">0 s</span>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span class="card-sub">Session uptime</span>
+          <span id="statUptime">--:--</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ DEVICE CONTROLS ══════════════════════════════════════ -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-label">Device Controls</div>
+    <div class="controls">
+      <button class="btn" id="btnCal"    onclick="sendCmd('CAL')"    disabled>Recalibrate Zero</button>
+      <button class="btn" id="btnStatus" onclick="sendCmd('STATUS')" disabled>Request Status</button>
+      <button class="btn red" id="btnReset" onclick="sendCmd('RESET')" disabled>Reset Counters</button>
+      <button class="btn red" onclick="clearHistory()">Clear History</button>
+    </div>
+  </div>
+
+  <!-- ══ HISTORY ROW ══════════════════════════════════════════ -->
+  <div class="grid-2">
+
+    <!-- Alert Event Log -->
+    <div class="card">
+      <div class="card-label">Alert Event Log</div>
+      <div class="scroll-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Time</th><th>Angle</th><th>Duration</th></tr></thead>
+          <tbody id="alertBody"></tbody>
+        </table>
+        <div class="empty" id="alertEmpty">No alerts recorded yet</div>
+      </div>
+    </div>
+
+    <!-- Weekly Bar Chart -->
+    <div class="card">
+      <div class="card-label">Weekly Summary (past 7 days)</div>
+      <div id="weeklyChart" style="padding-top:10px;"></div>
+      <div class="empty" id="weeklyEmpty">No weekly data yet</div>
+    </div>
+  </div>
+
+  <!-- ══ COMMUNICATION LOG ════════════════════════════════════ -->
+  <div class="card">
+    <div class="card-label">Communication Log</div>
+    <div class="log" id="logArea"></div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+//  GLOBAL STATE
+// ─────────────────────────────────────────────────────────────────
+let connected    = false;
+let sessionStart = null;
+let uptimeTimer  = null;
+let alertEvents  = [];
+let weeklyData   = {};
+let stream       = null;
+
+
+// ─────────────────────────────────────────────────────────────────
+//  API HELPER
+// ─────────────────────────────────────────────────────────────────
+async function api(path, options) {
+  const res  = await fetch(path, options || {});
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || "Request failed");
+  return data;
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  PORT LIST
+// ─────────────────────────────────────────────────────────────────
+async function refreshPorts() {
+  try {
+    const data = await api("/api/ports");
+    fillPortDropdown(data.ports || []);
+  } catch (e) {
+    log("Port refresh error: " + e.message);
+  }
+}
+
+function fillPortDropdown(ports) {
+  const sel   = document.getElementById("portSelect");
+  const saved = sel.value;
+  sel.innerHTML = '<option value="">Select Port</option>' +
+    ports.map(function(p) {
+      return '<option value="' + p.device + '">' + p.device + " — " + p.description + "</option>";
+    }).join("");
+  if (saved) sel.value = saved;
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  CONNECTION
+// ─────────────────────────────────────────────────────────────────
+async function toggleConnection() {
+  if (connected) { await doDisconnect(); }
+  else           { await doConnect(); }
+}
+
+async function doConnect() {
+  const port = document.getElementById("portSelect").value;
+  try {
+    const data = await api("/api/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ port: port || null })
+    });
+    applyConnection(data.connection);
+    log("Connect request sent");
+  } catch (e) { log("Connect failed: " + e.message); }
+}
+
+async function doDisconnect() {
+  try {
+    const data = await api("/api/disconnect", { method: "POST" });
+    applyConnection(data.connection);
+  } catch (e) { log("Disconnect failed: " + e.message); }
+}
+
+function applyConnection(conn) {
+  connected    = !!conn.connected;
+  sessionStart = conn.session_start_ms || null;
+
+  document.getElementById("dot").className = "dot " + (connected ? "on" : "off");
+  document.getElementById("connLabel").textContent =
+    connected ? ("Connected (" + (conn.port || "?") + ")") : "Disconnected";
+
+  const btn = document.getElementById("btnConnect");
+  btn.textContent = connected ? "Disconnect" : "Connect";
+  btn.classList.toggle("blue", !connected);
+
+  ["btnCal", "btnStatus", "btnReset"].forEach(function(id) {
+    document.getElementById(id).disabled = !connected;
+  });
+  document.getElementById("portSelect").disabled = connected;
+
+  if (connected) { startUptime(); }
+  else           { stopUptime();  document.getElementById("statUptime").textContent = "--:--"; }
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  COMMANDS
+// ─────────────────────────────────────────────────────────────────
+async function sendCmd(cmd) {
+  if (!connected) return;
+  try {
+    await api("/api/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command: cmd })
+    });
+    log("TX: " + cmd);
+  } catch (e) { log("Send error: " + e.message); }
+}
+
+async function clearHistory() {
+  try {
+    await api("/api/history/clear", { method: "POST" });
+    alertEvents = [];
+    weeklyData  = {};
+    renderTable();
+    renderChart();
+  } catch (e) { log("Clear error: " + e.message); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  COLOUR HELPERS  — smooth green→amber→red transition on the gauge
+// ─────────────────────────────────────────────────────────────────
+function lerpColor(a, b, t) {
+  return [
+    Math.round(a[0] + (b[0]-a[0])*t),
+    Math.round(a[1] + (b[1]-a[1])*t),
+    Math.round(a[2] + (b[2]-a[2])*t)
+  ];
+}
+
+function tiltColor(tilt) {
+  if (tilt <= 10) return [52, 211, 153];
+  if (tilt <= 20) return lerpColor([52,211,153], [251,191,36],  (tilt-10)/10);
+  if (tilt <= 45) return lerpColor([251,191,36],  [248,113,113], (tilt-20)/25);
+  return [248, 113, 113];
+}
+
+function rgbStr(c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
+
+
+// ─────────────────────────────────────────────────────────────────
+//  LIVE DATA
+// ─────────────────────────────────────────────────────────────────
+function applyLive(live) {
+  var tilt    = Math.min(Math.max(Number(live.tilt || 0), 0), 90);
+  var ARC_LEN = 251.33;
+  var col     = rgbStr(tiltColor(tilt));
+
+  var arc = document.getElementById("gaugeArc");
+  arc.setAttribute("stroke-dasharray", (tilt / 90 * ARC_LEN) + " " + ARC_LEN);
+  arc.setAttribute("stroke", col);
+  arc.setAttribute("filter", live.alert_active ? "url(#glow)" : "");
+
+  var numEl = document.getElementById("gaugeNum");
+  numEl.textContent = tilt.toFixed(1);
+  numEl.setAttribute("fill", col);
+
+  var badge  = document.getElementById("alertBadge");
+  var detail = document.getElementById("alertDetail");
+  if (live.alert_active) {
+    badge.innerHTML    = '<span class="badge bad">ALERT ACTIVE</span>';
+    detail.textContent = "Tilt at " + tilt.toFixed(1) + " deg — adjust posture";
+  } else {
+    badge.innerHTML    = '<span class="badge ok">POSTURE OK</span>';
+    detail.textContent = "No active alert";
+  }
+
+  var card = document.getElementById("alertCard");
+  if (card) card.classList.toggle("alert-glow", !!live.alert_active);
+
+  var countEl = document.getElementById("statCount");
+  var count   = live.alert_count || 0;
+  countEl.textContent = count;
+  countEl.style.color = count > 0 ? "var(--red)" : "";
+
+  document.getElementById("statDuration").textContent = fmtDuration(live.total_alert_ms || 0);
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  ALERT TABLE
+// ─────────────────────────────────────────────────────────────────
+function renderTable() {
+  var tbody = document.getElementById("alertBody");
+  var empty = document.getElementById("alertEmpty");
+
+  if (alertEvents.length === 0) {
+    tbody.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  tbody.innerHTML = alertEvents.map(function(e, i) {
+    var angle      = Number(e.angle).toFixed(1);
+    var angleColor = Number(e.angle) >= 30 ? 'color:var(--red)'   :
+                     Number(e.angle) >= 15 ? 'color:var(--amber)' : '';
+    return "<tr>" +
+      "<td>" + (alertEvents.length - i) + "</td>" +
+      "<td>" + e.time + "</td>" +
+      "<td style='" + angleColor + "'>" + angle + " deg</td>" +
+      "<td>" + fmtDuration(e.duration_ms) + "</td>" +
+    "</tr>";
+  }).join("");
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  WEEKLY CHART
+// ─────────────────────────────────────────────────────────────────
+function renderChart() {
+  var container = document.getElementById("weeklyChart");
+  var empty     = document.getElementById("weeklyEmpty");
+
+  var days = [];
+  for (var i = 6; i >= 0; i--) {
+    var d     = new Date();
+    d.setDate(d.getDate() - i);
+    var key   = d.toISOString().slice(0, 10);
+    var label = d.toLocaleDateString("en-US", { weekday: "short" });
+    var count = (weeklyData[key] || { count: 0 }).count;
+    days.push({ label: label, count: count });
+  }
+
+  var maxCount = Math.max(1, Math.max.apply(null, days.map(function(d) { return d.count; })));
+  var hasData  = days.some(function(d) { return d.count > 0; });
+
+  if (!hasData) {
+    container.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  container.innerHTML = days.map(function(d) {
+    var pct = (d.count / maxCount) * 100;
+    return '<div class="bar-row">' +
+      '<span class="bar-label">' + d.label + '</span>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+      '<span class="bar-count">' + d.count + '</span>' +
+    '</div>';
+  }).join("");
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  SERVER-SENT EVENTS
+// ─────────────────────────────────────────────────────────────────
+function startStream() {
+  if (stream) stream.close();
+  stream = new EventSource("/api/stream");
+
+  stream.addEventListener("snapshot", function(ev) {
+    var s = JSON.parse(ev.data);
+    fillPortDropdown(s.ports || []);
+    applyConnection(s.connection || {});
+    applyLive(s.live || {});
+    alertEvents = s.alerts || [];
+    weeklyData  = s.weekly || {};
+    renderTable();
+    renderChart();
+    var area = document.getElementById("logArea");
+    area.innerHTML = "";
+    (s.logs || []).forEach(function(l) { log(l); });
+  });
+
+  stream.addEventListener("live", function(ev) {
+    applyLive(JSON.parse(ev.data));
+  });
+
+  stream.addEventListener("connection", function(ev) {
+    applyConnection(JSON.parse(ev.data));
+  });
+
+  stream.addEventListener("history", function(ev) {
+    var d = JSON.parse(ev.data);
+    alertEvents = d.alerts || alertEvents;
+    weeklyData  = d.weekly || weeklyData;
+    renderTable();
+    renderChart();
+  });
+
+  stream.addEventListener("ack", function(ev) {
+    log("ACK: " + JSON.parse(ev.data).message);
+  });
+
+  stream.addEventListener("log", function(ev) {
+    log(JSON.parse(ev.data).text);
+  });
+
+  stream.onerror = function() {
+    log("Stream disconnected — reconnecting...");
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  UTILITIES
+// ─────────────────────────────────────────────────────────────────
+function fmtDuration(ms) {
+  if (ms < 1000) return ms + " ms";
+  var s = Math.floor(ms / 1000);
+  if (s < 60)   return s + " s";
+  var m = Math.floor(s / 60), r = s % 60;
+  return m + " m " + r + " s";
+}
+
+function log(text) {
+  var area = document.getElementById("logArea");
+  area.innerHTML += "<div>" + text + "</div>";
+  if (area.children.length > 300) area.removeChild(area.firstChild);
+  area.scrollTop = area.scrollHeight;
+}
+
+function startUptime() {
+  if (uptimeTimer) return;
+  uptimeTimer = setInterval(function() {
+    if (!connected || !sessionStart) return;
+    var e = Date.now() - sessionStart;
+    var s = Math.floor(e / 1000) % 60;
+    var m = Math.floor(e / 60000) % 60;
+    var h = Math.floor(e / 3600000);
+    var p = function(n) { return String(n).padStart(2, "0"); };
+    document.getElementById("statUptime").textContent =
+      (h > 0 ? h + ":" : "") + p(m) + ":" + p(s);
+  }, 1000);
+}
+
+function stopUptime() {
+  if (uptimeTimer) { clearInterval(uptimeTimer); uptimeTimer = null; }
+}
+
+
+// ─────────────────────────────────────────────────────────────────
+//  PAGE INIT
+// ─────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    var s = await api("/api/state");
+    fillPortDropdown(s.ports || []);
+    applyConnection(s.connection || {});
+    applyLive(s.live || {});
+    alertEvents = s.alerts || [];
+    weeklyData  = s.weekly || {};
+    renderTable();
+    renderChart();
+  } catch (e) {
+    log("Init error: " + e.message);
+  }
+  await refreshPorts();
+  startStream();
+}
+
+init();
+</script>
+</body>
+</html>
